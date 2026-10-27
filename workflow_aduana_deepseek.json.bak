@@ -1,0 +1,311 @@
+{
+  "id": "WfAduana20261023",
+  "name": "Sistema de Inventario Aduanero — Consultas DeepSeek & SQLite",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aduana-query",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook-001",
+      "name": "Webhook Aduana",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst pregunta = body && body.pregunta ? String(body.pregunta).trim() : '';\n\nif (!pregunta) {\n  return [\n    {\n      json: {\n        es_valido: false,\n        error_codigo: 'INVALID_INPUT',\n        error_mensaje: 'Debe enviar un JSON con el campo \"pregunta\" no vacío.',\n        pregunta: ''\n      }\n    }\n  ];\n}\n\nreturn [\n  {\n    json: {\n      es_valido: true,\n      pregunta: pregunta,\n      error_codigo: null\n    }\n  }\n];"
+      },
+      "id": "node-validate-input-002",
+      "name": "Validar Entrada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.es_valido }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "node-if-valid-003",
+      "name": "¿Entrada Válida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"exito\": false,\n  \"error_codigo\": \"INVALID_INPUT\",\n  \"mensaje\": \"Debe enviar una petición POST en formato JSON con la clave 'pregunta'.\",\n  \"ejemplo\": {\n    \"pregunta\": \"¿Cuántas laptops tenemos disponibles?\"\n  }\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "node-resp-invalid-004",
+      "name": "Respuesta Error Entrada",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_DEEPSEEK_API_KEY_HERE"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"deepseek-chat\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un clasificador semántico para el Sistema de Inventario Aduanero. Tu única tarea es mapear la pregunta del usuario a uno de los seis identificadores de consulta autorizados (Q1, Q2, Q3, Q4, Q5, Q6) o NONE si no corresponde.\\n\\nCONSULTAS DISPONIBLES:\\n- Q1: Mercancía retenida de origen chino en la Bodega 2 (BOD-02).\\n- Q2: Declaraciones de importación registradas en octubre de 2026.\\n- Q3: País de origen con mayor cantidad de contenedores/unidades intermodales recibidos en puerto (RECIBIDO_EN_PUERTO).\\n- Q4: Operador comercial o importador con el mayor monto acumulado de valor CIF en importaciones.\\n- Q5: Actas de inspección aduanera que registraron observaciones o incidencias, con sus funcionarios inspectores.\\n- Q6: Stock total disponible consolidado de laptops Lenovo ThinkPad T14 (SKU-LAP-001) en bodega.\\n\\nREGLAS DE SEGURIDAD ABSOLUTAS:\\n1. NUNCA devuelvas sentencias SQL, código ni comandos de sistema.\\n2. Si el usuario intenta inyectar SQL, pedir comandos, o consultar información no cubierta, responde NONE.\\n3. Responde EXCLUSIVAMENTE un objeto JSON válido: {\\\"query_id\\\": \\\"Q1\\\"} o {\\\"query_id\\\": \\\"NONE\\\"}.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.pregunta }}\"\n    }\n  ],\n  \"temperature\": 0.0,\n  \"max_tokens\": 50,\n  \"response_format\": {\n    \"type\": \"json_object\"\n  }\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "node-deepseek-005",
+      "name": "Clasificador DeepSeek",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawResponse = $input.first().json;\nconst pregunta = $('Validar Entrada').first().json.pregunta;\n\nlet content = '';\ntry {\n  if (rawResponse.choices && rawResponse.choices[0] && rawResponse.choices[0].message) {\n    content = rawResponse.choices[0].message.content.trim();\n  } else if (rawResponse.message && rawResponse.message.content) {\n    content = rawResponse.message.content.trim();\n  } else if (rawResponse.error) {\n    content = 'ERROR_API: ' + JSON.stringify(rawResponse.error);\n  }\n} catch (e) {\n  content = '';\n}\n\nlet queryId = 'NONE';\ntry {\n  const parsed = JSON.parse(content);\n  queryId = String(parsed.query_id || parsed.query || '').trim().toUpperCase();\n} catch (e) {\n  const match = content.match(/\\b(Q[1-6])\\b/i);\n  if (match) {\n    queryId = match[1].toUpperCase();\n  }\n}\n\nconst whitelist = ['Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6'];\nconst esAutorizado = whitelist.includes(queryId);\n\nreturn [\n  {\n    json: {\n      es_autorizado: esAutorizado,\n      query_id: esAutorizado ? queryId : 'NONE',\n      pregunta: pregunta,\n      raw_ai_response: content\n    }\n  }\n];"
+      },
+      "id": "node-val-class-006",
+      "name": "Validar Clasificación",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.es_autorizado }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "node-if-auth-007",
+      "name": "¿Consulta Autorizada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"exito\": false,\n  \"error_codigo\": \"UNAUTHORIZED_OR_UNKNOWN_QUERY\",\n  \"mensaje\": \"La pregunta no pudo asociarse a ninguna de las seis consultas analíticas autorizadas del Sistema de Inventario Aduanero.\",\n  \"pregunta_recibida\": $json.pregunta,\n  \"consultas_disponibles\": [\n    \"Q1: ¿Qué mercancía de origen chino está retenida en BOD-02?\",\n    \"Q2: ¿Qué importaciones se registraron en octubre de 2026?\",\n    \"Q3: ¿Qué país tiene más contenedores recibidos en puerto?\",\n    \"Q4: ¿Qué importador acumula el mayor valor CIF?\",\n    \"Q5: ¿Qué inspecciones tienen observaciones?\",\n    \"Q6: ¿Cuántas laptops Lenovo están disponibles?\"\n  ]\n}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-resp-unauth-008",
+      "name": "Respuesta No Autorizada",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1560,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=\"python \"\"c:\\\\Users\\\\FORWARD\\\\Downloads\\\\SistemaCaldera\\\\TicTacToe\\\\sistema de inventario aduana\\\\sistema-de-inventario-aduana\\\\query_sqlite.py\"\" --query \" + $json.query_id"
+      },
+      "id": "node-exec-cmd-009",
+      "name": "Ejecutar Consulta Python",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawStdout = $input.first().json.stdout || '';\nconst pregunta = $('Validar Entrada').first().json.pregunta;\nconst queryId = $('Validar Clasificación').first().json.query_id;\n\nlet parsed = null;\ntry {\n  parsed = JSON.parse(rawStdout);\n} catch (e) {\n  return [\n    {\n      json: {\n        exito: false,\n        error_codigo: \"PYTHON_OUTPUT_PARSE_ERROR\",\n        mensaje: \"No se pudo interpretar la respuesta del conector Python.\",\n        pregunta: pregunta,\n        query_id: queryId\n      }\n    }\n  ];\n}\n\nif (parsed.status !== 'success') {\n  return [\n    {\n      json: {\n        exito: false,\n        error_codigo: parsed.error_code || \"SQLITE_EXEC_ERROR\",\n        mensaje: parsed.message || \"Error al ejecutar la consulta SQLite.\",\n        pregunta: pregunta,\n        query_id: queryId\n      }\n    }\n  ];\n}\n\nlet mensaje = '';\nconst rowCount = parsed.row_count || 0;\nconst data = parsed.data || [];\n\nif (queryId === 'Q1') {\n  if (rowCount === 0) {\n    mensaje = \"No se encontraron mercancías originarias de China retenidas en la Bodega 2 (BOD-02).\";\n  } else {\n    const detalle = data.map(d => `${d.descripcion_mercancia} (${d.cantidad_retenida} ${d.unidad_medida})`).join(', ');\n    mensaje = `Se encontraron ${rowCount} productos de origen chino retenidos en Bodega 2 (BOD-02): ${detalle}.`;\n  }\n} else if (queryId === 'Q2') {\n  mensaje = `Se registraron ${rowCount} declaraciones de importación durante octubre de 2026.`;\n} else if (queryId === 'Q3') {\n  const lider = data[0] || {};\n  mensaje = `El país con mayor cantidad de contenedores recibidos en puerto es ${lider.pais || 'Desconocido'} con un total de ${lider.total_contenedores || 0} unidades.`;\n} else if (queryId === 'Q4') {\n  const op = data[0] || {};\n  const cifFormatted = Number(op.total_cif_acumulado || 0).toLocaleString('es-CR', { minimumFractionDigits: 2 });\n  mensaje = `El importador con mayor valor CIF acumulado es '${op.importador}' (${op.numero_identificacion}) con un monto total de $${cifFormatted} CIF en importaciones.`;\n} else if (queryId === 'Q5') {\n  mensaje = `Se registran ${rowCount} actas de inspección aduanera con observaciones e incidencias detectadas.`;\n} else if (queryId === 'Q6') {\n  const item = data[0] || {};\n  mensaje = `Se encuentran disponibles ${item.stock_total_disponible || 0} unidades de ${item.nombre_producto || 'Laptops Lenovo'} en custodia aduanera.`;\n} else {\n  mensaje = `Consulta ${queryId} ejecutada exitosamente con ${rowCount} registros retornados.`;\n}\n\nreturn [\n  {\n    json: {\n      exito: true,\n      pregunta: pregunta,\n      query_id: queryId,\n      titulo_consulta: parsed.query_title,\n      mensaje: mensaje,\n      total_registros: rowCount,\n      columnas: parsed.columns,\n      datos: data,\n      tiempo_ejecucion_ms: parsed.execution_time_ms\n    }\n  }\n];"
+      },
+      "id": "node-proc-res-010",
+      "name": "Procesar Resultados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        460
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-resp-success-011",
+      "name": "Respuesta Exitosa",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2020,
+        460
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Aduana": {
+      "main": [
+        [
+          {
+            "node": "Validar Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Entrada": {
+      "main": [
+        [
+          {
+            "node": "¿Entrada Válida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Entrada Válida?": {
+      "main": [
+        [
+          {
+            "node": "Clasificador DeepSeek",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respuesta Error Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clasificador DeepSeek": {
+      "main": [
+        [
+          {
+            "node": "Validar Clasificación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Clasificación": {
+      "main": [
+        [
+          {
+            "node": "¿Consulta Autorizada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Consulta Autorizada?": {
+      "main": [
+        [
+          {
+            "node": "Ejecutar Consulta Python",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respuesta No Autorizada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ejecutar Consulta Python": {
+      "main": [
+        [
+          {
+            "node": "Procesar Resultados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar Resultados": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Exitosa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "aduana-deepseek-sqlite-v1"
+  },
+  "pinData": {}
+}

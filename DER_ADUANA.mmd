@@ -1,0 +1,178 @@
+erDiagram
+    PAIS {
+        int id_pais PK
+        string codigo_alfa2 UK "Codigo ISO 3166-1 alpha-2 (ej. CN, US, CR)"
+        string codigo_alfa3 UK "Codigo ISO 3166-1 alpha-3 (ej. CHN, USA, CRI)"
+        string nombre "Nombre oficial del pais en espanol"
+        string region "Region o bloque comercial internacional"
+    }
+
+    CATEGORIA_ARANCELARIA {
+        int id_categoria PK
+        string codigo_arancelario UK "Codigo oficial SAC/HS (ej. 8471.30.00)"
+        string descripcion "Glosa descriptiva oficial de la clasificacion"
+        decimal porcentaje_arancel "Tasa arancelaria DAI (0.00% a 100.00%)"
+        int categoria_padre_id FK "Jerarquia arancelaria recursiva (Capitulo-Partida)"
+    }
+
+    PRODUCTO {
+        int id_producto PK
+        string codigo_sku UK "Codigo de referencia o SKU del fabricante"
+        string nombre "Denominacion tecnica o comercial"
+        string descripcion "Especificaciones y ficha de la mercancia"
+        int categoria_arancelaria_id FK "Clasificacion arancelaria asignada"
+        string unidad_medida "UNIDADES, KG, LITROS, BULTOS"
+        int pais_origen_id FK "Pais de fabricacion de la mercancia"
+        decimal precio_referencia "Valor estimado de referencia USD"
+    }
+
+    OPERADOR_COMERCIAL {
+        int id_operador PK
+        string numero_identificacion UK "NIT, RUT, RFC o Cedula Fiscal"
+        string razon_social "Nombre legal societario registrado"
+        string nombre_comercial "Nombre de fantasia comercial"
+        string tipo_operador "ENUM: IMPORTADOR, EXPORTADOR, AMBOS"
+        string direccion "Domicilio legal o fiscal del operador"
+        string telefono "Telefono corporativo de contacto"
+        string email "Correo oficial para notificaciones aduaneras"
+        int pais_id FK "Pais de constitucion o domicilio fiscal"
+        string estado "ENUM: ACTIVO, INACTIVO, SUSPENDIDO"
+    }
+
+    AGENTE_ADUANERO {
+        int id_agente PK
+        string numero_licencia UK "Numero de patente o licencia aduanal"
+        string nombre_completo "Nombre del agente autorizado"
+        string agencia "Razon social de la agencia aduanal"
+        string telefono "Telefono corporativo"
+        string email UK "Correo profesional registrado ante la aduana"
+        string estado "ENUM: HABILITADO, SUSPENDIDO, REVOCADO"
+    }
+
+    FUNCIONARIO {
+        int id_funcionario PK
+        string identificacion UK "Cedula institucional o codigo de empleado"
+        string nombre_completo "Nombre y apellidos del funcionario"
+        string cargo "Puesto oficial (Inspector, Aforador, Jefe Bodega)"
+        string departamento "Unidad operativa (Fiscalizacion, Operaciones, Aforo)"
+        string email UK "Correo institucional aduanero"
+        int supervisor_id FK "Jerarquia recursiva de mando institucional"
+        boolean activo "Indicador de servicio activo"
+    }
+
+    BODEGA {
+        int id_bodega PK
+        string codigo_bodega UK "Codigo operativo unico (ej. BOD-01, BOD-02)"
+        string nombre "Nombre del deposito o almacen fiscal"
+        string tipo_bodega "ENUM: GENERAL, FISCAL, REFRIGERADA, VALORES, CUARENTENA"
+        string ubicacion "Terminal, muelle o coordenadas del recinto"
+        decimal capacidad_m3 "Capacidad volumetrica maxima en m3"
+        int funcionario_responsable_id FK "Funcionario custodio a cargo"
+        boolean activo "Disponibilidad operativa de la bodega"
+    }
+
+    CONTENEDOR {
+        int id_contenedor PK
+        string numero_contenedor UK "Identificador ISO 6346 (ej. MSCU7823419)"
+        string tipo_contenedor "ENUM: 20_DRY, 40_DRY, 40_HIGH_CUBE, REEFER, OPEN_TOP"
+        decimal tara_kg "Peso vacio de la estructura en kg"
+        decimal peso_maximo_kg "Capacidad bruta maxima permitida en kg"
+        int pais_origen_id FK "Pais de embarque o procedencia internacional"
+        string linea_naviera "Empresa transportista o naviera internacional"
+        string estado "ENUM: EN_TRANSITO, RECIBIDO_EN_PUERTO, EN_INSPECCION, DESCONSOLIDADO, DESPACHADO, RETENIDO"
+    }
+
+    DECLARACION_ADUANERA {
+        int id_declaracion PK
+        string numero_declaracion UK "Folio oficial unico (ej. DEC-2026-IMP-00042)"
+        string tipo_declaracion "ENUM: IMPORTACION, EXPORTACION, TRANSITO"
+        string regimen_aduanero "Regimen aduanero (Definitivo, Temporal, Deposito)"
+        datetime fecha_registro "Fecha y hora de emision de la declaracion"
+        datetime fecha_liquidacion "Fecha y hora de autorizacion de levante"
+        int operador_comercial_id FK "Operador importador o exportador declarante"
+        int agente_aduanero_id FK "Agente aduanal que refrenda el despacho"
+        int pais_procedencia_id FK "Pais de expedicion o salida de la carga"
+        int pais_destino_id FK "Pais de destino final de la mercancia"
+        int contenedor_id FK "Contenedor principal asociado al tramite"
+        string canal_aforo "ENUM: VERDE, AMARILLO, ROJO"
+        string estado "ENUM: REGISTRADA, EN_TRAMITE, EN_INSPECCION, AUTORIZADA, RETENIDA, CANCELADA"
+        decimal valor_total_cif "Valor CIF consolidado en USD"
+        decimal total_tributos "Monto total de tributos liquidados en USD"
+    }
+
+    DETALLE_DECLARACION {
+        int id_detalle PK
+        int declaracion_id FK "Declaracion aduanera matriz"
+        int producto_id FK "Mercancia declarada"
+        int numero_linea "Partida correlativa (1, 2, 3...) dentro de la declaracion"
+        decimal cantidad_declarada "Unidades amparadas en factura de despacho"
+        string unidad_medida "Unidad de medida arancelaria aplicable"
+        decimal precio_unitario_fob "Precio unitario FOB en USD"
+        decimal valor_total_fob "Valor total FOB de la partida en USD"
+        decimal tasa_arancelaria "Porcentaje de arancel especifico aplicado"
+        decimal monto_arancel "Total del impuesto arancelario liquidado"
+    }
+
+    INVENTARIO {
+        int id_inventario PK
+        int bodega_id FK "Bodega fisica donde reposa la mercancia"
+        int producto_id FK "Producto custodiado en el recinto"
+        decimal cantidad_disponible "Stock libre para levante y traslado"
+        decimal cantidad_retenida "Stock bajo medida cautelar o revision fisica"
+        decimal cantidad_total "Columna generada STORED: disponible + retenida"
+        string estado_inventario "ENUM: DISPONIBLE, RETENIDO_TOTAL, RETENIDO_PARCIAL, DECOMISADO, EN_CUARENTENA"
+        datetime fecha_ultima_actualizacion "Timestamp de ultimo movimiento o arqueo"
+    }
+
+    MOVIMIENTO_INVENTARIO {
+        int id_movimiento PK
+        string tipo_movimiento "ENUM: INGRESO_IMPORTACION, SALIDA_DESPACHO, TRASLADO_ENTRE_BODEGAS, BLOQUEO_RETENCION, LIBERACION_RETENCION, AJUSTE_MERMA, DECOMISO"
+        int producto_id FK "Mercancia afectada por el movimiento"
+        int bodega_origen_id FK "Bodega emisora (NULL en arribo exterior)"
+        int bodega_destino_id FK "Bodega receptora (NULL en levante final)"
+        decimal cantidad "Volumen transferido o ajustado"
+        datetime fecha_movimiento "Momento exacto del registro operativo"
+        int declaracion_id FK "Declaracion vinculada (RESTRICT para trazabilidad)"
+        int inspeccion_id FK "Acta de aforo vinculada (RESTRICT para trazabilidad)"
+        int funcionario_id FK "Funcionario aduanero que fiscaliza y autoriza"
+        string motivo "Justificacion tecnica y documental del movimiento"
+    }
+
+    INSPECCION_ADUANERA {
+        int id_inspeccion PK
+        string numero_acta UK "Folio oficial unico del acta de aforo fisico"
+        int declaracion_id FK "Declaracion aduanera sometida a control"
+        int funcionario_id FK "Inspector aduanero asignado al aforo"
+        datetime fecha_inspeccion "Momento del reconocimiento fisico o documental"
+        string tipo_inspeccion "ENUM: FISICA_INTRUSIVA, DOCUMENTAL, SCANNER_NO_INTRUSIVO, ALEATORIA"
+        string resultado "ENUM: CONFORME_SIN_OBSERVACIONES, OBSERVACIONES_LEVES, RETENCION_PREVENTIVA, DECOMISO_MERCANCIA, RECHAZADO"
+        boolean tuvo_observaciones "Bandera de deteccion de inconsistencias"
+        string observaciones "Detalle descriptivo de hallazgos en la revision"
+        string acciones_tomadas "Medidas cautelares o resolucion dictaminada"
+    }
+
+    %% Relaciones y Cardinalidades del Dominio Aduanero
+    CATEGORIA_ARANCELARIA |o--o{ CATEGORIA_ARANCELARIA : "subpartida_de"
+    CATEGORIA_ARANCELARIA ||--o{ PRODUCTO : "clasifica"
+    PAIS ||--o{ PRODUCTO : "origen_de"
+    PAIS ||--o{ OPERADOR_COMERCIAL : "domicilio_de"
+    PAIS ||--o{ CONTENEDOR : "procedencia_de"
+    PAIS ||--o{ DECLARACION_ADUANERA : "procedencia_declaracion"
+    PAIS ||--o{ DECLARACION_ADUANERA : "destino_declaracion"
+    OPERADOR_COMERCIAL ||--o{ DECLARACION_ADUANERA : "presenta"
+    AGENTE_ADUANERO ||--o{ DECLARACION_ADUANERA : "refrenda"
+    CONTENEDOR |o--o{ DECLARACION_ADUANERA : "transporta"
+    FUNCIONARIO |o--o{ FUNCIONARIO : "supervisa_a"
+    FUNCIONARIO ||--o{ BODEGA : "custodia"
+    FUNCIONARIO ||--o{ INSPECCION_ADUANERA : "ejecuta"
+    FUNCIONARIO ||--o{ MOVIMIENTO_INVENTARIO : "autoriza"
+    DECLARACION_ADUANERA ||--|{ DETALLE_DECLARACION : "contiene"
+    PRODUCTO ||--o{ DETALLE_DECLARACION : "declarado_en"
+    BODEGA ||--o{ INVENTARIO : "resguarda"
+    PRODUCTO ||--o{ INVENTARIO : "registrado_en"
+    PRODUCTO ||--o{ MOVIMIENTO_INVENTARIO : "moviliza"
+    BODEGA |o--o{ MOVIMIENTO_INVENTARIO : "origen_de"
+    BODEGA |o--o{ MOVIMIENTO_INVENTARIO : "destino_de"
+    DECLARACION_ADUANERA |o--o{ MOVIMIENTO_INVENTARIO : "origina"
+    INSPECCION_ADUANERA |o--o{ MOVIMIENTO_INVENTARIO : "ordena"
+    DECLARACION_ADUANERA ||--o{ INSPECCION_ADUANERA : "sujeta_a"
